@@ -1,38 +1,53 @@
 import RPi.GPIO as GPIO
-import time
 
-class PWM_DAC:
-    def __init__(self, gpio_pin, pwm_frequency, dynamic_range, verbose = False):
+class PWMDAC:
+    def __init__(self, gpio_pin, pwm_frequency, dynamic_range, verbose=False):
         self.gpio_pin = gpio_pin
-        self.freq = pwm_frequency
-        self.Dynamic_range = dynamic_range
+        self.pwm_frequency = pwm_frequency
+        self.dynamic_range = dynamic_range
+        self.verbose = verbose
 
         GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.gpio_pin, GPIO.OUT, initial = 0)
-        self.pwm = GPIO.PWM(self.gpio_pin, self.freq)
+        GPIO.setup(self.gpio_pin, GPIO.OUT, initial=0)
+
+        self.pwm = GPIO.PWM(self.gpio_pin, self.pwm_frequency)
+        self.pwm.start(0)  # duty cycle 0%
 
     def deinit(self):
-        GPIO.output(self.gpio_bits, 0)
-        GPIO.cleanup()
+        # Останавливаем ШИМ и чистим GPIO
+        try:
+            self.pwm.ChangeDutyCycle(0)
+            self.pwm.stop()
+        finally:
+            GPIO.output(self.gpio_pin, 0)
+            GPIO.cleanup()
 
     def set_voltage(self, voltage):
-        if  (0.0 <= voltage <= self.dynamic_range):
-            pwm.ChangeDutyCycle(self.freq / self.dynamic_range * 100)
-        else:
-            print(f"Напряжение выходит за динамический диапазон ЦАП (0.00 - {self.dynamic_range:.2f} B)")
-            print("Устанавливаем 0.0 B")
-            return 0
-        return(int(voltage / self.dynamic_range * 255))
+        if not (0.0 <= voltage <= self.dynamic_range):
+            print(
+                f"Напряжение выходит за динамический диапазон ЦАП "
+                f"(0.00 - {self.dynamic_range:.2f} В)"
+            )
+            return
+
+        duty = voltage / self.dynamic_range * 100.0
+        self.pwm.ChangeDutyCycle(duty)
+
+        if self.verbose:
+            print(f"Коэффициент заполнения: {duty:.2f}%")
 
 if __name__ == "__main__":
+    dac = None
     try:
-        dac = PWM_DAC(12, 500, 3.290, True)
-
+        # Пример из методички: PWMDAC(12, 500, 3.290, True)
+        dac = PWMDAC(12, 500, 3.290, True)  # пин, частота (Гц), диапазон (В), verbose
         while True:
             try:
-                voltage = float(input("Введите напряжение в вольтах: "))
+                voltage = float(input("Введите напряжение в Вольтах: "))
                 dac.set_voltage(voltage)
+                print()
             except ValueError:
-                print("Вывведи не число. Попробуйте еще раз\n")
+                print("Вы ввели не число. Попробуйте ещё раз\n")
     finally:
-        dac.deinit()
+        if dac is not None:
+            dac.deinit()
